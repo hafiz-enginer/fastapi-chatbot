@@ -4,10 +4,26 @@ from typing import List, Optional, Dict, Any
 import requests
 import os
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
 app = FastAPI(title="Shopping Chatbot API - Unified Endpoint")
+
+
+# Add CORS middleware
+origins = [
+    "http://localhost:5173",  # if you run frontend locally
+    "https://chat-bot-fq96.vercel.app",  # your deployed frontend
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # allow these origins
+    allow_credentials=True,
+    allow_methods=["*"],  # allow all HTTP methods
+    allow_headers=["*"],  # allow all headers
+)
 
 # Environment variables
 CATEGORY_API_URL = os.getenv("CATEGORY_API_URL")
