@@ -1,11 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Dict, Any
 import requests
 import os
-import json
 from dotenv import load_dotenv
-from openai import OpenAI   # ✅ OpenAI import
 
 load_dotenv()
 
@@ -14,17 +12,15 @@ app = FastAPI(title="Shopping Chatbot API - Unified Endpoint")
 # Environment variables
 CATEGORY_API_URL = os.getenv("CATEGORY_API_URL")
 ITEMS_API_BASE = os.getenv("ITEMS_API_BASE")
-BILL_API_URL = os.getenv("BILL_API_URL")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")   # ✅ OpenAI key env
+BILL_API_URL = os.getenv("BILL_API_URL")  # Adjust if needed
 
-# OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 # ----- Models -----
 class CartItem(BaseModel):
     name: str
     quantity: int = Field(..., gt=0)
     price: float = Field(..., gt=0)
+
 
 class UserDetails(BaseModel):
     name: str
@@ -38,16 +34,16 @@ class UserDetails(BaseModel):
             raise ValueError('Phone must be 10 or 11 digits')
         return v
 
+
 class ChatRequest(BaseModel):
     action: str
     payload: Optional[Dict[str, Any]] = {}
 
-class ChatText(BaseModel):   # ✅ new model for NLP input
-    message: str
 
 # ----- In-memory session store (demo) -----
 user_session: Optional[UserDetails] = None
 cart: List[CartItem] = []
+
 
 # ----- Helper functions -----
 def fetch_categories():
@@ -56,8 +52,9 @@ def fetch_categories():
         resp.raise_for_status()
         data = resp.json()
         return [cat["categoryName"].strip() for cat in data if cat.get("isEnable")]
-    except Exception:
+    except Exception as e:
         return []
+
 
 def fetch_items_by_category(cat_name: str):
     try:
@@ -65,46 +62,9 @@ def fetch_items_by_category(cat_name: str):
         resp = requests.get(url)
         resp.raise_for_status()
         return resp.json()
-    except Exception:
+    except Exception as e:
         return []
 
-# ✅ New function: Analyze user text with OpenAI
-def analyze_user_message(message: str) -> dict:
-    prompt = f"""
-    Tum ek shopping chatbot ho. 
-    User ke message ko dekho aur decide karo ke konsa action lena hai.
-
-    Possible actions:
-    - greet
-    - login
-    - list_categories
-    - list_items
-    - add_to_cart
-    - show_cart
-    - checkout
-    - logout
-
-    Agar payload zaroori ho to include karo (JSON ke form mein).
-
-    Example output:
-    {{
-      "action": "add_to_cart",
-      "payload": {{"name": "Apple", "quantity": 2, "price": 120}}
-    }}
-
-    User message: "{message}"
-    """
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2
-    )
-
-    try:
-        return json.loads(response.choices[0].message.content)
-    except:
-        return {"action": "greet", "payload": {}}
 
 # ----- Unified chat endpoint -----
 @app.post("/chat")
@@ -126,6 +86,8 @@ def chat(request: ChatRequest):
             return {"message": f"Welcome {user.name}!", "user": user.dict()}
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
+
+    # ... rest of your existing code ...
 
     if action == "list_categories":
         categories = fetch_categories()
@@ -206,8 +168,3 @@ def chat(request: ChatRequest):
 
     raise HTTPException(status_code=400, detail="Invalid action")
 
-# ✅ New endpoint: raw text input -> GPT -> /chat
-@app.post("/chat-nlp")
-def chat_nlp(req: ChatText):
-    result = analyze_user_message(req.message)
-    return chat(ChatRequest(**result))
